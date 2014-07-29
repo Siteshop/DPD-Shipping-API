@@ -35,7 +35,9 @@ class Dpd {
 		$this->validateForm($form);
 
 		$url  = $this->api_url . 'parcel_interface/parcel_import.php';
-		$json = $this->requestJson($url, $form, 'POST', array('content-type' => 'application/x-www-form-urlencoded'));
+
+		$json = $this->requestJson($url, $form);
+
 		$json = array_merge(array(
 			'status'    => 'ok',
 			'errlog'    => NULL,
@@ -62,7 +64,7 @@ class Dpd {
 		return $response->json();
 	}
 
-	public function printParcel($parcels)
+	public function getParcelLabel($parcels)
 	{
 		$url = $this->api_url . 'parcel_interface/parcel_print.php';
 
@@ -77,6 +79,22 @@ class Dpd {
 		return $response->getHeader('Content-Type') == 'application/pdf' ? $response->getBody() : $response->json();
 	}
 
+	public function getParcelManifest($date, $type = 'manifest')
+	{
+		$url = $this->api_url . 'parcel_interface/parcel_manifest_print.php';
+
+		$data = [
+			'username' => $this->user,
+			'password' => $this->pass,
+			'type'     => $type,
+			'date'	   => $date
+		];
+
+		$response = $this->request($url, $data);
+
+		return $response->getHeader('Content-Type') == 'application/pdf' ? $response->getBody() : $response->json();
+	}
+
 	public function sendParcels()
 	{
 		$url = $this->api_url . 'parcel_interface/parcel_datasend.php';
@@ -84,6 +102,52 @@ class Dpd {
 		$data = [
 			'username' => $this->user,
 			'password' => $this->pass
+		];
+
+		$response = $this->requestJson($url, $data);
+
+		return $response;
+	}
+
+	public function sendCollectRequest($requests)
+	{
+		$data = [];
+
+		if( ! isset($requests[0]))
+		{
+			$requests = array($requests);
+		}
+
+		foreach($requests as $k => $request)
+		{
+			$form = new Form\CollectRequest($request);
+
+			//$this->validateForm($form);
+
+			foreach($request as $key => $value)
+			{
+				$data[$key . '_' . $k] = $value;
+			}
+		}
+
+		$url  = $this->api_url . 'cr/cr_applet_upload.php';
+
+		$response = $this->requestJson($url, $form, 'POST', array('content-type' => 'application/x-www-form-urlencoded'), array($this->user, $this->pass));
+
+		return $response;
+	}
+
+	public function zipCodeFinder($city, $county, $street, $street_no = null)
+	{
+		$url = $this->api_url . 'parcel_interface/postal_code_info.php';
+
+		$data = [
+			'currlang'		=>	$this->language,
+			'secret'		=>	$this->secret,
+			'city'			=>	$city,
+			'county'		=>	$county,
+			'street'		=>	$street,
+			'street_number'	=>	$street_no
 		];
 
 		$response = $this->requestJson($url, $data);
@@ -111,9 +175,9 @@ class Dpd {
 		return $form;
 	}
 
-	protected function requestJson($url, $data = array(), $method = 'POST', array $headers = array('content-type' => 'application/x-www-form-urlencoded'))
+	protected function requestJson($url, $data = array(), $method = 'POST', array $headers = array('content-type' => 'application/x-www-form-urlencoded'), $auth = array())
 	{
-		$content = $this->request($url, $data, $method, $headers);
+		$content = $this->request($url, $data, $method, $headers, $auth);
 
 		$json = $content->json();
 
@@ -123,7 +187,7 @@ class Dpd {
 		return $json;
 	}
 
-	protected function request($url, $data = array(), $method = 'GET', array $headers = array())
+	protected function request($url, $data = array(), $method = 'POST', array $headers = array(), array $auth = array())
 	{
 		if ($data instanceof Form)
 			$data = $data->toArray();
@@ -132,6 +196,11 @@ class Dpd {
 			'query' => $data,
 			'headers' => $headers
 		];
+
+		if( ! empty($auth) )
+		{
+			$options['auth'] = $auth;
+		}
 
 		$client = new Client();
 		$request  = $client->createRequest($method, $url, $options);
