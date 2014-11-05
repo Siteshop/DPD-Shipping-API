@@ -498,4 +498,14 @@ class ParcelGeneration extends Form {
 
 		return $this;
 	}
+
+	public function toUrl(){
+		$str = [];
+		$data = $this->toArray();
+		foreach($data as $k => $v){
+			$str[] = urlencode($k) . '=' . urlencode($v);
+		}
+
+		return implode('&', $str);
+	}
 }

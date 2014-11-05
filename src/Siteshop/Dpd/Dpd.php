@@ -30,6 +30,30 @@ class Dpd {
 		$this->language = $config['language'];
 	}
 
+	public function generateParcelForm($data)
+	{
+		$form = new Form\ParcelGeneration();
+		$form->setUsername($this->user);
+		$form->setPassword($this->pass);
+		$form->setName1($data->name);
+		$form->setStreet($data->address);
+		$form->setCity($data->city);
+		$form->setCountry('RO');
+		$form->setPcode($data->zip);
+		$form->setEmail($data->email);
+		$form->setPhone($data->phone);
+		$form->setRemark($data->remark);
+		$form->setWeight(floatval($data->weight));
+		$form->setNumOfParcel($data->parcel_num);
+		$form->setExchNumOfParcel($data->parcel_num);
+		$form->setOrderNumber($data->order_number);
+		$form->setParcelType($data->parcel_type);
+		$form->setParcelCodType($data->parcel_cod_type);
+		$form->setCodAmount($data->cod_amount);
+
+		return $form;
+	}
+
 	public function generateParcel(Form\ParcelGeneration $form)
 	{
 		$this->validateForm($form);
@@ -55,13 +79,21 @@ class Dpd {
 			->setSecret($this->secret)
 			->setParcelNumber($parcel_number);
 
-		// $this->validateForm($form);
+		$this->validateForm($form);
 
 		$url  = $this->api_url . 'parcel_interface/parcel_status.php';
 
-		$response = $this->requestJson($url, $form);
+		$json = $this->requestJson($url, $form);
 
-		return $response->json();
+		$json = array_merge(array(
+			'status'    => 'ok',
+			'errlog'    => NULL,
+			'parcel_status' => ''
+		), $json);
+
+		if ('ok' != $json[ 'status' ]) throw new Exception\DpdParcelStatusException($json[ 'errlog' ], json_encode($json));
+
+		return $json;
 	}
 
 	public function getParcelLabel($parcels)
@@ -122,7 +154,7 @@ class Dpd {
 		{
 			$form = new Form\CollectRequest($request);
 
-			//$this->validateForm($form);
+			$this->validateForm($form);
 
 			foreach($request as $key => $value)
 			{
@@ -157,13 +189,13 @@ class Dpd {
 
 	public function getTrackingUrl($parcel_number)
 	{
-		return "https://tracking.dpd.de/cgi-bin/delistrack?pknr=$parcel_number&lang=" . $this->language; //typ = 10 || 31 => CSV
+		return "https://tracking.dpd.de/cgi-bin/delistrack?pknr=" . $parcel_number . "&lang=" . $this->language; //typ = 10 || 31 => CSV
 		// return "https://tracking.dpd.de/cgi-bin/delistrack?typ=10&pknr=$parcel_number&lang=$language";
 	}
 
 	protected function validateForm(Form $form)
 	{
-		$validator  = Validation::createValidatorBuilder()
+		$validator = Validation::createValidatorBuilder()
 			->enableAnnotationMapping()
 			->getValidator();
 
